@@ -1,0 +1,322 @@
+/**
+ //* @file game.cpp
+ //todo @author divyaansh (divilol@gmail.com)
+ //~ @brief Just trying c++
+ //^ @version 0.01
+ //& @date 2022-08-10
+ //? @copyright Copyright (c) 2022
+ *
+ */
+
+#include "Entity.h"
+#include <iostream>
+#include "log.h"
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_image.h>
+#include <math.h>
+#include "particles.h"
+
+const int WIDTH = 800*2, HEIGHT = 600*2;
+
+bool check_collision(const SDL_Rect& a, const SDL_Rect& b, SDL_Rect& intersect)
+{
+    intersect = { 0, 0, 0, 0 };
+
+    int leftX = std::max(a.x, b.x);
+    int rightX = std::min(a.x + a.w, b.x + b.w);
+    int topY = std::max(a.y, b.y);
+    int bottomY = std::min(a.y + a.h, b.y + b.h);
+
+    if (leftX <= rightX && topY <= bottomY)
+    {
+        intersect = { leftX, topY, rightX - leftX, bottomY - topY };
+        return true;
+    }
+
+    return false;
+}
+
+int main(int argc, char *argv[])
+{
+    int x,y;
+    const int TOTAL_PARTICLES = 20;
+    /* log is a Log object*/
+    Log log;
+    /* Player action*/
+    bool up = 0;
+    bool down = 0;
+    bool right = 0;
+    bool left = 0;
+    bool space = 0;
+    float speed=0,angle=0;
+    float maxSpeed=1.0;
+    float acc=0.02, dec=0.03;
+    float turnSpeed=0.08;
+    short int alpha = 255;
+    short int r = 0;
+    short int g = 0;
+    short int b = 0;
+    //? Camera//
+    vector Camera;
+    //* Sample log//
+    log.send_log_in_color("Intialization.", 3);
+    //& Player and box are entitty object//
+    Entity player;
+    Entity box;
+    Entity plannet;
+    Particle *particles[ TOTAL_PARTICLES ];
+    SDL_Surface *back_surface;
+    SDL_Texture *back_texture;
+    SDL_Rect back_rect = {0,0,1404/5,846/5};
+    SDL_Rect back_rect_src = {0,0,1404,846};
+    //& Setting positon for player and the box//
+    player.entity_vector.x = 400;
+    player.entity_vector.y = 299;
+    plannet.entity_vector.x = 700;
+    plannet.entity_vector.y = 499;
+    box.entity_vector.x = 100;
+    box.entity_vector.y = 300;
+    plannet.entity_vector.angle = 0;
+    
+    //? Intialization*//
+    int flags = IMG_INIT_PNG;
+    int initStatus = IMG_Init(flags);
+    if ((initStatus & flags) != flags)
+    {
+    }
+
+    SDL_Init(SDL_INIT_EVERYTHING);
+    for( int p = 0; p < TOTAL_PARTICLES; p++ )
+    {
+        particles[ p ] = new Particle( player.entity_vector.x, player.entity_vector.y );
+    }
+    //? rect for player//
+    SDL_Rect intersection;
+    //! Window and Renderer//
+    SDL_Window *window = SDL_CreateWindow("Game", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, WIDTH, HEIGHT, SDL_WINDOW_ALLOW_HIGHDPI);
+    SDL_Renderer *renderer;
+    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+    //* Setting textures//
+    player.set_texture("spaceship.png", renderer);
+    box.set_texture("Crate.png", renderer);
+    plannet.set_texture("plannet.png",renderer);
+    back_surface = IMG_Load("space.png");
+    back_texture = SDL_CreateTextureFromSurface(renderer,back_surface);
+    log.send_log_in_color("Loading textures.", 3);
+    //* id for box and player//
+    player.id_char = "car";
+    player.id = 1;
+    box.id_char = "box";
+    box.id = 2;
+    plannet.id_char = "plannet";
+    plannet.id = 3;
+    //* size for box and player//
+    player.size_x = 64;
+    player.size_y = 64;
+    player.size_dsrec_x = 64;
+    player.size_dsrec_y = 64;
+    box.size_x = 64;
+    box.size_y = 64;
+    box.size_dsrec_x = 512;
+    box.size_dsrec_y = 512;
+    plannet.size_x = 100;
+    plannet.size_y = 100;
+    plannet.size_dsrec_x = 100;
+    plannet.size_dsrec_y = 100;
+    //* Sample Log//
+    log.send_log_in_color("Physics process.", 3);
+    log.send_log_in_color("End.", 3);
+    bool player_landed=false;
+    //? If any problems with window*/
+    if (NULL == window)
+    {
+        log.send_log_in_color("Couldn't create window", 4);
+        return 1;
+    }
+
+    //! Event variable//
+    SDL_Event windowEvent;
+    
+    while (true)
+    {
+        //& Camera stuff//
+	if(!player_landed){
+        	Camera.x = (player.entity_vector.x - WIDTH / 2) / 1.2;
+        	Camera.y = (player.entity_vector.y - HEIGHT / 2) / 1.2;
+	}
+        player.set_camera(Camera);
+        box.set_camera(Camera);
+        plannet.set_camera(Camera);
+        back_rect.x = -Camera.x;
+        back_rect.y = -Camera.y;
+        //* Events//
+   
+        if (SDL_PollEvent(&windowEvent))
+        {
+            if (SDL_QUIT == windowEvent.type)
+            {
+                break;
+            }
+            if (SDL_KEYDOWN == windowEvent.type)
+            {
+                if (SDLK_w == windowEvent.key.keysym.sym)
+                {
+                    up = 1;
+                }
+                if (SDLK_s == windowEvent.key.keysym.sym)
+                {
+                    down = 1;
+                }
+                if (SDLK_a == windowEvent.key.keysym.sym)
+                {
+                    left = 1;
+                }
+
+                if (SDLK_d == windowEvent.key.keysym.sym)
+                {
+                    right = 1;
+                }
+
+                if (SDLK_SPACE == windowEvent.key.keysym.sym)
+                {
+                    space = 1;
+                    r=255;
+                    g=255;
+                    b=255;
+                    player.entity_rect.h = 0;
+                    player.entity_rect.w = 0;
+
+                }
+            }
+
+            if (SDL_KEYUP == windowEvent.type)
+            {
+                if (SDLK_w == windowEvent.key.keysym.sym)
+                {
+                    up = 0;
+                }
+                if (SDLK_s == windowEvent.key.keysym.sym)
+                {
+                    down = 0;
+                }
+                if (SDLK_a == windowEvent.key.keysym.sym)
+                {
+                    left = 0;
+                }
+
+                if (SDLK_d == windowEvent.key.keysym.sym)
+                {
+                    right = 0;
+                }
+
+                if (SDLK_SPACE == windowEvent.key.keysym.sym)
+                {
+                    space = 0;
+                    r=0;
+                    g=0;
+                    b=0;
+                    player.entity_rect.h = player.size_x;
+                    player.entity_rect.w = player.size_y;
+                }
+            }
+        }
+      
+        if (up)
+        {
+            maxSpeed = 1*2;  
+            player.entity_vector.dx+=cos(player.entity_vector.angle)/2;
+            player.entity_vector.dy+=sin(player.entity_vector.angle)/2; 
+        }
+
+        if (down)
+        {
+            maxSpeed = 0.10*2;  
+            player.entity_vector.dx-=cos(player.entity_vector.angle)/2;
+            player.entity_vector.dy-=sin(player.entity_vector.angle)/2; 
+        }
+        
+         if (space && !down)
+        {   
+            maxSpeed = 5.00*2;
+            player.entity_vector.dx+=cos(player.entity_vector.angle)/2;
+            player.entity_vector.dy+=sin(player.entity_vector.angle)/2; 
+        }
+        else
+        {
+            player.entity_vector.dx*=0.99;
+            player.entity_vector.dy*=0.99; 
+        }
+     
+
+        if (right) player.entity_vector.angle += 0.003*2;
+        if (left)  player.entity_vector.angle -= 0.003*2;
+        
+        speed = sqrt( player.entity_vector.dx* player.entity_vector.dx+ player.entity_vector.dy* player.entity_vector.dy);
+       
+        if (speed>maxSpeed)
+     {  player.entity_vector.dx *= maxSpeed/speed;
+        player.entity_vector.dy *= maxSpeed/speed; }
+
+        player.entity_vector.x += player.entity_vector.dx;
+        player.entity_vector.y += player.entity_vector.dy;
+        //& Update//
+
+        player.update();
+        box.update();
+        plannet.update();
+        //^ Collsion//
+        if (check_collision(player.entity_rect,plannet.entity_rect,intersection))
+        {
+            Camera.x = (plannet.entity_vector.x-WIDTH/2);
+            Camera.y = (plannet.entity_vector.y-HEIGHT/2);
+            if(up)
+            {
+                player.exit();
+            }
+            player_landed = true;
+            speed = 0;
+            right = 0;
+            left = 0;
+            up = 0;
+           
+            if(!space)
+            {
+            player.entity_vector.dx *= -100;
+            player.entity_vector.dy *= -100;
+            }
+            log.send_log_in_color("Landed!", 3);
+        }
+        //! Rendering//
+        SDL_SetRenderDrawColor(renderer, r, g, b, 255);
+        SDL_RenderClear(renderer);
+        SDL_SetRenderDrawColor(renderer, r, g, b, 255);
+        
+
+        //Show particles
+        for( int p = 0; p < TOTAL_PARTICLES; p++ )
+        {
+            particles[ p ]->show();
+        }
+
+        
+        plannet.blit(window, renderer);
+        player.blit(window, renderer);
+        
+            
+        box.blit(window, renderer);
+        
+        SDL_RenderPresent(renderer);
+    }
+    //~ If program ended//
+    player.exit();
+    box.exit();
+    SDL_FreeSurface( red );
+    SDL_FreeSurface( green );
+    SDL_FreeSurface( blue );
+    IMG_Quit();
+    SDL_DestroyWindow(window);
+    log.send_log_in_color("Exited.", 3);
+    SDL_Quit();
+
+    return 0;
+}
